@@ -1,5 +1,7 @@
 services:
   subfindarr:
+    # 从源码构建。若想直接用已发布的镜像，把下面两行 build: 注释掉，
+    # 并把 image 改成 ghcr.io/vithur/subfindarr:1.0.0
     build:
       context: .
       dockerfile: Dockerfile

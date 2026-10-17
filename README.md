@@ -30,6 +30,27 @@ Seerr 订阅 → Sonarr/Radarr → qBittorrent → arr 导入
 - **改名跟随**：arr 重命名或质量升级后，字幕跟着改前缀
 - **台账**：SQLite 记录任务、已装字幕、动作流水，降级路径都有专属状态可查
 
+## Docker 镜像
+
+预构建镜像发布在 GitHub Container Registry：
+
+```bash
+docker pull ghcr.io/vithur/subfindarr:1.0.0
+```
+
+可用 tag：`1.0.0`、`1.0`、`latest`（稳定版），`main-edge`（跟随 main 分支）。
+
+**如果仓库是私有的，直接 pull 会失败（denied / unauthorized），需要先登录：**
+
+```bash
+echo "<你的 GitHub Personal Access Token>" | docker login ghcr.io -u <你的GitHub用户名> --password-stdin
+docker pull ghcr.io/vithur/subfindarr:1.0.0
+```
+
+该 token 只需要 `read:packages` 权限。仓库若已设为公开，则镜像可直接拉取、无需登录。
+
+想自己构建则跳过本节，用下面的「快速开始」从源码构建即可。
+
 ## 快速开始
 
 前提：已有一套运行中的 arr 栈（Sonarr / Radarr / Emby），且与 subfindarr 在同一个 Docker 网络。
