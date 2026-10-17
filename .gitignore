@@ -1,0 +1,53 @@
+# 密钥与本地配置：绝不入库
+.env
+.env.*
+!.env.example
+
+# 内部 token 文件
+.webhook_token
+.webhook_token.bak-*
+
+# 运行时配置与台账（config.example.yaml 才是模板）
+config/
+!config.example.yaml
+# 本地维护的线上配置副本（含部署环境实况，绝不入库）
+config.live.yaml
+*.live.yaml
+# 线上台账与页面缓存都在 config/ 下，显式点出来以免目录被整体忽略时误判
+config/subfindarr.db
+config/subfindarr.db-journal
+config/subfindarr.db-wal
+config/subfindarr.db-shm
+config/cache/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# 日志与产物
+logs/
+subs-out/
+
+# 备份与一次性验证残留
+*.bak*
+*.bak2*
+backup-e2e-*/
+backup-inplace-*/
+.last-inplace-backup
+write_env.sh
+
+# 一次性探针脚本（不进仓库）
+tools/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# 其他
+node_modules/
+.DS_Store
+*.log
+.cleanup-manifest*
+compose.yaml.standalone.bak

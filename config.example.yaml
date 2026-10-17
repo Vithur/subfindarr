@@ -1,0 +1,162 @@
+# subfindarr 配置
+# 所有字符串支持环境变量展开：${VAR} 或 ${VAR:default}
+
+server:
+  host: 0.0.0.0
+  port: 8097
+  # Webhook 鉴权：校验 Authorization: Bearer <token> 头（不用 ?token=，避免 URL 留痕）。
+  # token 值在 .env 里（WEBHOOK_TOKEN），不落进本文件。
+  webhook_token: ${WEBHOOK_TOKEN}
+  # 是否强制校验（默认 true）。仅本地调试可设 false。
+  webhook_require_token: true
+
+paths:
+  # 容器内媒体库根。compose 把宿主媒体库挂到这里（与 Emby 看到的同一份）
+  media_root: /media
+  # arr 传来的路径前缀 → 本容器路径前缀。arr 可能给容器视角或宿主视角的路径，
+  # 这里按最长前缀替换。通常只需保留默认的 /data/media → /media；
+  # 若 arr webhook 里出现宿主绝对路径，把它加进来（如 /srv/media: /media）。
+  path_map:
+    /data/media: /media
+  # 可写的字幕落盘目录（媒体库只读时的退路，或 dry-run 输出）
+  subs_out: /subs-out
+  # 页面缓存（减少对字幕站的重复请求）
+  cache: /config/cache
+  # SQLite 台账
+  db: /config/subfindarr.db
+  log: /logs/subfindarr.log
+
+# 写入策略
+write:
+  # false = 只下载并整理到 subs_out，不动媒体库（首次上线建议先 dry-run 一轮）
+  in_place: false
+  # 媒体库目录不可写时，是否回退到 subs_out
+  fallback_to_subs_out: true
+  # 已有同名字幕时是否强制覆盖
+  force: false
+
+naming:
+  # 落地后缀。preferred[0] 是写入用名；常见媒体库习惯用 .zh-cn，
+  # 若你的库里是别的后缀（如 .chs / .zh-Hans），把它挪到第一位即可。
+  preferred: [".zh-cn.srt", ".zh-Hans.srt", ".zh.srt", ".chs.srt", ".zh-CN.srt"]
+  # 「已有中文字幕」的识别别名（可带扩展名或不带；不带时按 .别名. 中缀匹配）。
+  # 与 preferred 分开：preferred 管写什么名，aliases 管认哪些名已经算有字幕。
+  aliases: [".zh-cn", ".zh-Hans", ".zh-CN", ".zh", ".chs", ".cht", ".sc", ".tc",
+            ".简中", ".简体", ".繁体"]
+  # 判定「已有字幕」时扫描的扩展名
+  extensions: [".srt", ".ass", ".ssa", ".sub"]
+
+arr:
+  sonarr:
+    url: http://sonarr:8989
+    api_key: ""          # 或 ${SONARR_API_KEY}
+  radarr:
+    url: http://radarr:7878
+    api_key: ""          # 或 ${RADARR_API_KEY}
+
+emby:
+  url: http://emby:8096
+  api_key: ${EMBY_API_KEY}
+  # 刷新范围：item（只刷该条）| library（扫库）
+  refresh_scope: item
+  # 库 Id → 容器内路径前缀。
+  #
+  # ⚠ 同一个库里常同时存在两种条目：
+  #   真文件型（路径在 /media/...）与 strm 型（路径在 /strm/...，媒体源是远程 URL）。
+  #   两类前缀都要登记，否则另一类条目永远匹配不到、刷新会被静默跳过。
+  #   key 用「真实库 Id + 自定义后缀」区分，归属时只取 Id 部分（`-` 之前）。
+  #
+  # 库 Id 可从 Emby 管理界面或 GET /Library/VirtualFolders 查到。
+  # 下面的值是示例，请替换成你自己的库 Id 与路径。
+  libraries:
+    "1": /media/movies
+    "1-strm": /strm/movies
+    "2": /media/tv
+    "2-strm": /strm/tv
+    "3": /media/anime
+    "3-strm": /strm/anime
+    "19296-strm": /strm/documentary
+
+# 出站网络策略：直连 HTTPS 优先，失败才逐级降级
+network:
+  # 直连 HTTPS 优先 → 重试 → 代理 → flaresolverr
+  retries: 3
+  backoff_sec: 1.5
+  # 页面请求超时。字幕站响应常见 5~25s 抖动，别用默认 10s
+  timeout_sec: 45
+  # 是否允许降级到代理（true 时需填下面的 proxy）
+  use_proxy: true
+  # 只有直连全部失败才会用到。留空则该级跳过。
+  # 若你的环境走代理访问字幕站反而更差，把 use_proxy 设 false 即可。
+  proxy: ""
+
+flaresolverr:
+  enabled: true
+  url: http://flaresolverr:8191
+  max_timeout_ms: 90000
+  # 只有拿到 HTTP 403 + cf-mitigated: challenge 才值得走
+
+cache:
+  enabled: true
+  ttl_sec: 21600
+
+sources:
+  # enabled 顺序即优先级
+  subhd:
+    enabled: true
+    base: https://subhd.tv
+    cookie: ${SUBHD_COOKIE}
+    retries: 3
+    retry_delay_sec: 1.5
+    # 三跳（prepare-download → /down/{sid} → api/sub/down）的单跳重试退避。
+    # 站点对同一 sid 会短时频控连续返 403，退避需比页面重试更长。
+    hop_backoff_sec: 4.0
+    min_score: 60
+  assrt:
+    enabled: false
+    base: https://assrt.net
+    api_token: ""
+  opensubtitles:
+    enabled: false
+    base: https://www.opensubtitles.org
+
+scoring:
+  # 官方简体中文单语最优，其次官译简中，再次非官方简中，最后简繁双语
+  weights:
+    official_hans_mono: 100
+    official_hans: 90
+    hans_mono: 80
+    hans_hant_bilingual: 60
+    hant_only: 40
+    unknown: 20
+  # 语言标签三级来源都拿不到时额外降权（Kernel 定案：unknown 排在有标签候选之后）
+  unknown_penalty: -10
+  # 各类黑名单分别计分（Kernel 样本：三类特征分开，不混成一个 -100）
+  penalties:
+    ai_keywords: -100
+    machine_translate_keywords: -100
+    ad_keywords: -100
+    cam_keywords: -80
+    ocr_suspect: -30
+    graphic_sub: -200
+  # 机翻/AI（Kernel 样本原样词表）
+  ai_keywords: ["AI翻译", "AI字幕", "机翻", "机器翻译", "gpt", "chatgpt", "whisper",
+                "deepl翻译", "auto-translate", "ai翻译"]
+  # 广告/水印（预览内容或标题命中即重罚）
+  ad_keywords: ["QQ群", "QQ号", "联系QQ", "热爱电影", "诚意制作"]
+  # 枪版源（单独一类：非 WEB-DL/BluRay 源，画质与字幕质量都差）
+  cam_keywords: ["HDTS", "TELESYNC", "TELECINE", "HDTC", "CAM"]
+  # 宣传噪音：轻微降权（标题带这些多半是营销文本，不是质量问题）
+  noise_keywords: ["特效 HDR防炫目", "完美双语同轴合并"]
+  noise_penalty: -5
+  hant_markers: ["繁體", "繁体", "CHT", "Big5", "港版", "台版"]
+  hans_markers: ["简体", "简中", "CHS", "GB", "Simplified", "简繁"]
+  mono_markers: ["单语", "简体中文", "英文"]
+
+queue:
+  workers: 2
+  max_retries: 2
+  retry_backoff_sec: 30
+  task_timeout_sec: 600
+
+log_level: INFO

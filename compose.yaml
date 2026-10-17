@@ -1,0 +1,49 @@
+services:
+  subfindarr:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: subfindarr:latest
+    container_name: subfindarr
+    restart: always
+    ports:
+    - "8097:8097"
+    volumes:
+    # 配置、台账（SQLite）与页面缓存持久化
+    - ./config:/config
+    # 媒体库：把宿主媒体库目录挂到容器内 /media（读写，否则无法就地写字幕）。
+    # MEDIA_PATH 在 .env 里填宿主绝对路径，例如 /srv/media。
+    # 指向与 Emby 看到的同一份目录即可；arr webhook 传来的路径由程序做前缀替换。
+    - ${MEDIA_PATH:?请在 .env 里设置媒体库宿主绝对路径 MEDIA_PATH}:/media
+    # 媒体库不可写时的退路 / dry-run 输出
+    - ./subs-out:/subs-out
+    # 日志
+    - ./logs:/logs
+    environment:
+    - PUID=${PUID:-1000}
+    - PGID=${PGID:-1000}
+    - TZ=${TZ:-Asia/Shanghai}
+    - SUBFINDARR_CONFIG=/config/config.yaml
+    # 密钥只按变量名注入容器（值来自同目录 .env，明文不进仓库与应用代码）
+    - SUBHD_COOKIE=${SUBHD_COOKIE}
+    - EMBY_API_KEY=${EMBY_API_KEY}
+    - WEBHOOK_TOKEN=${WEBHOOK_TOKEN}
+    # 出站策略由 config.network 控制（直连优先 → 代理兜底 → flaresolverr），
+    # 这里不设全局 http(s)_proxy。内部服务名必须进 no_proxy，否则容器互访会被代理拦。
+    - no_proxy=localhost,127.0.0.1,emby,sonarr,radarr,qbittorrent,qBittorrent,flaresolverr,subfindarr
+    - NO_PROXY=localhost,127.0.0.1,emby,sonarr,radarr,qbittorrent,qBittorrent,flaresolverr,subfindarr
+    networks:
+    - arr
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8097/health',timeout=5)"]
+      interval: 30s
+      timeout: 8s
+      retries: 3
+      start_period: 20s
+
+networks:
+  # 与 Sonarr / Radarr / Emby 共用的网络。默认按名称 `arr` 外部引用；
+  # 若你的栈用别的网络名，在 .env 里设 ARR_NETWORK=名字。
+  arr:
+    external: true
+    name: ${ARR_NETWORK:-arr}

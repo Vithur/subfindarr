@@ -1,0 +1,6 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+httpx[socks]==0.28.1
+PyYAML==6.0.2
+py7zr==0.22.0
+chardet==5.2.0
